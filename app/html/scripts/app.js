@@ -1,9 +1,47 @@
-requirejs(["jquery", "knockout", "Q"], function($, ko, Q) {
+requirejs(["jquery", "knockout", "Q", "bootstrap"], function($, ko, Q) {
 
-	var ServiceViewModel = function (name) {
+	var ServiceActionViewModel = function (serviceViewModel, actionData) {
+		this.rel = actionData.rel;
+		this.href = actionData.href;
+
+		this.tabControlId = this.rel + 'Tab';
+		this.tabPaneControlId = this.rel + 'TabPane';
+
+		switch (this.rel) {
+			case 'export':
+				this.title = 'Export';
+				this.description = 'Export all the things';
+				break;
+
+			case 'import':
+				this.title = 'Import';
+				this.description = 'Import stuff...';
+				break;
+
+			default:
+				this.title = '';
+				this.description = '';
+		}
+	}
+
+	ServiceActionViewModel.prototype.tabClass = function(tabIndex) {
+		tabIndex = ko.unwrap(tabIndex);
+		return tabIndex === 0 ? 'active' : '';
+	}
+
+	function buildServiceActionViewModels(serviceViewModel, actionsData) {
+		return (actionsData || []).map(function (actionData) {
+			return new ServiceActionViewModel(serviceViewModel, actionData);
+		});
+	}
+
+	var ServiceViewModel = function (data) {
 		this.iconClass = ko.observable('glyphicon glyphicon-cloud');
 		this.selected = ko.observable(false);
-		this.name = ko.observable(name);
+		this.name = ko.observable(data.name || "");
+		this.label = ko.observable(data.label || "");
+		this.plan = ko.observable(data.plan || "");
+		this.actions = ko.observableArray(buildServiceActionViewModels(this, data.actions));
 
 		var self = this;
 		this.itemClass = ko.computed(function () {
@@ -13,6 +51,14 @@ requirejs(["jquery", "knockout", "Q"], function($, ko, Q) {
 			}
 			return result;
 		});
+	};
+
+	ServiceViewModel.prototype.actionsAfterRenderHandler = function (elements) {
+		// var $elements = $(elements);
+		// var $firstTabElement = $elements.first('.nav.nav-tabs li');
+		// if ($firstTabElement) {
+		// 	$firstTabElement.tab('show');
+		// }
 	};
 
 	var ServiceListViewModel = function () {
@@ -43,11 +89,17 @@ requirejs(["jquery", "knockout", "Q"], function($, ko, Q) {
 		});
 	};
 
-	var ServiceContainerViewModel = function (selectedServiceObservable) {
+	var ServiceContainerViewModel = function (servicesObservable, selectedServiceObservable) {
+		this.services = servicesObservable;
 		this.selectedService = selectedServiceObservable;
 
 		var self = this;
 		this.templateName = ko.computed(function () {
+			var services = self.services();
+			if (!services || services.length === 0) {
+				return 'noServicesAvailableTemplate';
+			}
+
 			var selectedService = self.selectedService();
 			return selectedService ? 'serviceDetailsTemplate' : 'noServiceSelectedTemplate';
 		});
@@ -56,7 +108,9 @@ requirejs(["jquery", "knockout", "Q"], function($, ko, Q) {
 	var RootPageViewModel = function () {
 		this.serviceListViewModel = new ServiceListViewModel();
 
-		this.serviceContainerViewModel = new ServiceContainerViewModel(this.serviceListViewModel.selectedService);
+		this.serviceContainerViewModel = new ServiceContainerViewModel(
+			this.serviceListViewModel.services,
+			this.serviceListViewModel.selectedService);
 	};
 
 	function loadTemplates(url) {
@@ -86,7 +140,7 @@ requirejs(["jquery", "knockout", "Q"], function($, ko, Q) {
 				dataType: 'json'
 			}).done(function (data) {
 				var serviceViewModels = data.map(function (item) {
-					return new ServiceViewModel(item.name);
+					return new ServiceViewModel(item);
 				});
 				rootPageViewModel.serviceListViewModel.services(serviceViewModels);
 			}).fail(function (xhr) {

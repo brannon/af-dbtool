@@ -1,11 +1,13 @@
 package main
 
 import (
+    "fmt"
     "net/http"
 
     "github.com/gorilla/mux"
 
     "github.com/brannon/af-dbtool/app/api"
+    "github.com/brannon/af-dbtool/app/cf"
 )
 
 func main() {
@@ -16,6 +18,7 @@ func main() {
 
     router.PathPrefix("/").Handler(http.FileServer(http.Dir("./html")))
 
-    // TODO: Get port from CloudFoundry configuration
-    http.ListenAndServe(":8080", router)
+    port := cf.GetPort(8080)
+    fmt.Printf("Listening on port %d\n", port)
+    http.ListenAndServe(fmt.Sprintf(":%d", port), router)
 }

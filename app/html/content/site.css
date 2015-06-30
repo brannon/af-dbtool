@@ -13,3 +13,17 @@ div.list-group-item a {
 div.list-group-item.active a {
 	color: #fff;
 }
+
+/* Content styles */
+
+dl.dl-horizontal dt {
+	width: 80px;
+}
+
+dl.dl-horizontal dd {
+	margin-left: 90px;
+}
+
+div.tab-content {
+	margin: 1em;
+}

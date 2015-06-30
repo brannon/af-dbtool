@@ -17,6 +17,27 @@
 	</div>
 </script>
 
+<script type="text/html" id="noServicesAvailableTemplate">
+	<div class="panel panel-default">
+		<div class="panel-body">
+			There are no services available
+		</div>
+	</div>
+</script>
+
+<script type="text/html" id="serviceDetailsActionsTemplate">
+	<div>
+		<ul id="serviceTabPanel" class="nav nav-tabs" role="tablist" data-bind="foreach: actions">
+			<li role="presentation" data-bind="css: tabClass($index), attr: { id: tabControlId }">
+				<a data-bind="text: title, attr: { href: '#' + tabPaneControlId, 'aria-controls': tabPaneControlId }" role="tab" data-toggle="tab"></a>
+			</li>
+		</ul>
+		<div class="tab-content" data-bind="foreach: actions">
+			<div role="tabpanel" class="tab-pane" data-bind="text: description, css: tabClass($index), attr: { id: tabPaneControlId }"></div>
+		</div>
+	</div>
+</script>
+
 <script type="text/html" id="serviceDetailsTemplate">
 	<div class="panel panel-primary">
 		<div class="panel-heading">
@@ -25,6 +46,16 @@
 			</div>
 		</div>
 		<div class="panel-body">
+			<dl class="dl-horizontal">
+				<dt>name</dt>
+				<dd data-bind="text: name" />
+				<dt>service</dt>
+				<dd data-bind="text: label" />
+				<dt>plan</dt>
+				<dd data-bind="text: plan" />
+			</dl>
+
+			<!-- ko template: { name: 'serviceDetailsActionsTemplate', afterRender: actionsAfterRenderHandler }--><!-- /ko -->
 		</div>
 	</div>
 </script>

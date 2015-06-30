@@ -5,5 +5,11 @@ import (
 )
 
 func BuildRoutes(r *mux.Router) {
-    r.Handle("/services", ServicesHandler)
+
+    r.HandleFunc("/services", ServicesHandler.List).
+        Methods("GET")
+
+    r.HandleFunc("/services/{name}/actions/{action_name}", ServicesHandler.DoAction).
+        Methods("POST")
+
 }
