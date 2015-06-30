@@ -1,6 +1,7 @@
 package api
 
 import (
+    "bytes"
     "encoding/json"
     "fmt"
     "net/http"
@@ -9,6 +10,7 @@ import (
     "github.com/gorilla/mux"
 
     "github.com/brannon/af-dbtool/app/cf"
+    "github.com/brannon/af-dbtool/app/mysql"
 )
 
 type ServiceActionApiModel struct {
@@ -48,12 +50,26 @@ func (handler *servicesHandler) DoAction(w http.ResponseWriter, req *http.Reques
 
     actionName := vars["action_name"]
 
-    if actionName != "export" {
+    switch actionName {
+    case "export":
+        provider := &mysql.MysqlProvider{}
+
+        var buffer bytes.Buffer
+        err := provider.Export(serviceConfiguration.Credentials, &buffer)
+        if err != nil {
+            http.Error(w, err.Error(), 500)
+            return
+        }
+
+        w.WriteHeader(200)
+        w.Write(buffer.Bytes())
+
+        break
+
+    default:
         http.Error(w, fmt.Sprintf("The action '%s' is not supported", actionName), 400)
         return
     }
-
-    w.WriteHeader(204)
 }
 
 func (handler *servicesHandler) List(w http.ResponseWriter, req *http.Request) {
