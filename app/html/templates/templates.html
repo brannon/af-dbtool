@@ -1,0 +1,30 @@
+<script type="text/html" id="serviceListItemTemplate">
+	<div data-bind="css: itemClass">
+		<i data-bind="css: iconClass" /> <a href="#" data-bind="text: name, click: function () { $parent.selectService($index) }"></a>
+	</div>
+</script>
+
+<script type="text/html" id="serviceListTemplate">
+	<div class="list-group" data-bind="template: { name: 'serviceListItemTemplate', foreach: services }">
+	</div>
+</script>
+
+<script type="text/html" id="noServiceSelectedTemplate">
+	<div class="panel panel-default">
+		<div class="panel-body">
+			Select a service
+		</div>
+	</div>
+</script>
+
+<script type="text/html" id="serviceDetailsTemplate">
+	<div class="panel panel-primary">
+		<div class="panel-heading">
+			<div class="panel-title">
+				<i data-bind="css: iconClass" /> <span data-bind="text: name" />
+			</div>
+		</div>
+		<div class="panel-body">
+		</div>
+	</div>
+</script>

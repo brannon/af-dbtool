@@ -1,0 +1,15 @@
+
+/* Global */
+body {
+	padding: 2.5em;
+}
+
+/* List styles */
+
+div.list-group-item a {
+	color: inherit;
+}
+
+div.list-group-item.active a {
+	color: #fff;
+}

@@ -1,17 +1,39 @@
 <html>
 <head>
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.5/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.5/css/bootstrap-theme.min.css" />
+    <link rel="stylesheet" href="content/site.css" />
     <script>
         var require = {
             baseUrl: "scripts",
             paths: {
+                "bootstrap": "//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.5/js/bootstrap.min",
                 "jquery": "http://code.jquery.com/jquery-2.1.4.min",
-                "knockout": "https://cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min"
+                "knockout": "https://cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min",
+                "Q": "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q"
             }
         };
     </script>
-    <script data-main="app" src="http://requirejs.org/docs/release/2.1.18/minified/require.js"></script>
+    <script data-main="app" src="//requirejs.org/docs/release/2.1.18/minified/require.js"></script>
 </head>
 <body>
-
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="col-md-3">
+                    <div id="service-list" data-bind="with: serviceListViewModel">
+                        <!-- ko template: 'serviceListTemplate' -->
+                        <!-- /ko -->
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div id="service-container" data-bind="with: serviceContainerViewModel">
+                        <!-- ko template: { name: templateName, data: selectedService } -->
+                        <!-- /ko -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
