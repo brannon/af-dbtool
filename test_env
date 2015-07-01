@@ -1,0 +1,20 @@
+
+export VCAP_SERVICES='
+{
+	"p-mysql": [
+		{
+			"credentials": {
+				"hostname": "localhost",
+				"port": 3309,
+				"username": "username",
+				"password": "password"
+			},
+			"label": "p-mysql",
+			"name": "mysql-service",
+			"plan": "Free-1GB",
+			"tags": [
+				"mysql"
+			]
+		}
+	]
+}'
