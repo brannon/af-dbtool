@@ -68,5 +68,6 @@ Vagrant.configure(2) do |config|
     sudo apt-get update
     sudo apt-get install -y mysql-client-5.6
     sudo apt-get install -y golang
+    
   SHELL
 end

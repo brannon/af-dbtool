@@ -1,6 +1,6 @@
 <script type="text/html" id="serviceListItemTemplate">
 	<div data-bind="css: itemClass">
-		<i data-bind="css: iconClass" /> <a href="#" data-bind="text: name, click: function () { $parent.selectService($index) }"></a>
+		<i data-bind="css: iconClass" /> <a data-bind="text: name, attr: { href: '#/services/' + name() }"></a>
 	</div>
 </script>
 
@@ -39,6 +39,7 @@
 </script>
 
 <script type="text/html" id="serviceDetailsTemplate">
+	<!-- ko with: selectedService -->
 	<div class="panel panel-primary">
 		<div class="panel-heading">
 			<div class="panel-title">
@@ -55,7 +56,25 @@
 				<dd data-bind="text: plan" />
 			</dl>
 
-			<!-- ko template: { name: 'serviceDetailsActionsTemplate', afterRender: actionsAfterRenderHandler }--><!-- /ko -->
+			<!-- ko template: { name: 'serviceDetailsActionsTemplate' }--><!-- /ko -->
 		</div>
 	</div>
+	<!-- /ko -->
+</script>
+
+<script type="text/html" id="servicesPageTemplate">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-12">
+                <div class="col-md-3">
+                    <div id="service-list" data-bind="template: 'serviceListTemplate'">
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div id="service-container" data-bind="template: { name: containerTemplateName }">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </script>

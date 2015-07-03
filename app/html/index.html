@@ -1,36 +1,48 @@
 <html>
 <head>
+<!--
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.5/css/bootstrap.min.css" />
     <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.5/css/bootstrap-theme.min.css" />
+-->
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap-theme.min.css" />
     <link rel="stylesheet" href="content/site.css" />
     <script>
         var require = {
             baseUrl: "scripts",
             paths: {
-                "bootstrap": "//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.5/js/bootstrap.min",
-                "jquery": "http://code.jquery.com/jquery-2.1.4.min",
-                "knockout": "https://cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min",
-                "Q": "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q"
+                // "bootstrap": "//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.5/js/bootstrap.min",
+                // "jquery": "http://code.jquery.com/jquery-2.1.4.min",
+                // "knockout": "https://cdnjs.cloudflare.com/ajax/libs/knockout/3.3.0/knockout-min",
+                // "Q": "https://cdnjs.cloudflare.com/ajax/libs/q.js/1.4.1/q"
+                "bootstrap": "/vendor/bootstrap/js/bootstrap.min",
+                "jquery": "/vendor/jquery/jquery-2.1.4.min",
+                "knockout": "/vendor/knockout/knockout-3.3.0",
+                "Q": "/vendor/q/q.min",
+                "sammy": "/vendor/sammy/sammy-latest.min"
+            },
+            shim: {
+                "bootstrap": ["jquery"]
             }
         };
     </script>
-    <script data-main="app" src="//requirejs.org/docs/release/2.1.18/minified/require.js"></script>
+    <script data-main="app" src="/vendor/require/require.js"></script>
 </head>
 <body>
     <div class="container-fluid">
-        <div class="row">
-            <div class="col-md-12">
-                <div class="col-md-3">
-                    <div id="service-list" data-bind="with: serviceListViewModel">
-                        <!-- ko template: 'serviceListTemplate' --><!-- /ko -->
-                    </div>
-                </div>
-                <div class="col-md-9">
-                    <div id="service-container" data-bind="with: serviceContainerViewModel">
-                        <!-- ko template: { name: templateName, data: selectedService } --><!-- /ko -->
-                    </div>
-                </div>
+        <nav class="navbar navbar-default navbar-fixed-top">
+            <div class="navbar-header">
+                <span class="navbar-brand"><a href="#" class="navbar-link">DBtool</a></span>
             </div>
+            <ul class="nav navbar-nav">
+                <li><a href="#/services">Services</a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+                <li data-bind="visible: loggedIn"><a href="#/logout">Logout</a></li>
+            </ul>
+        </nav>
+        <div id="page-content" class="container-fluid">
+        <!-- ko template: viewTemplate --><!-- /ko -->
         </div>
     </div>
 </body>

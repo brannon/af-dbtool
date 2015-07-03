@@ -1,154 +1,174 @@
-requirejs(["jquery", "knockout", "Q", "bootstrap"], function($, ko, Q) {
+var imports = [
+	"sammy",
+	"jquery",
+	"knockout",
+	"Q",
+	"viewModels/loginPageViewModel",
+	"viewModels/servicesPageViewModel",
 
-	var ServiceActionViewModel = function (serviceViewModel, actionData) {
-		this.rel = actionData.rel;
-		this.href = actionData.href;
+	// Place implicit references here:
+	"bootstrap",
+];
+requirejs(imports, function(Sammy, $, ko, Q, LoginPageViewModel, ServicesPageViewModel) {
 
-		this.tabControlId = this.rel + 'Tab';
-		this.tabPaneControlId = this.rel + 'TabPane';
-
-		switch (this.rel) {
-			case 'export':
-				this.title = 'Export';
-				this.description = 'Export all the things';
-				break;
-
-			case 'import':
-				this.title = 'Import';
-				this.description = 'Import stuff...';
-				break;
-
-			default:
-				this.title = '';
-				this.description = '';
-		}
-	}
-
-	ServiceActionViewModel.prototype.tabClass = function(tabIndex) {
-		tabIndex = ko.unwrap(tabIndex);
-		return tabIndex === 0 ? 'active' : '';
-	}
-
-	function buildServiceActionViewModels(serviceViewModel, actionsData) {
-		return (actionsData || []).map(function (actionData) {
-			return new ServiceActionViewModel(serviceViewModel, actionData);
+	function loadTemplates(urls) {
+		var promises = urls.map(function (url) {
+		    return Q($.ajax({
+		        url: url,
+		        dataType: 'html'
+		    }).done(function (html) {
+		        $('head').append(html);
+		    }).fail(function (xhr) {
+		    	throw new Error("Error Loading Template '" + url + "' : " + xhr.status);
+		    }));
 		});
+
+		return Q.all(promises);
 	}
 
-	var ServiceViewModel = function (data) {
-		this.iconClass = ko.observable('glyphicon glyphicon-cloud');
-		this.selected = ko.observable(false);
-		this.name = ko.observable(data.name || "");
-		this.label = ko.observable(data.label || "");
-		this.plan = ko.observable(data.plan || "");
-		this.actions = ko.observableArray(buildServiceActionViewModels(this, data.actions));
-
+	var app = Sammy(function() {
 		var self = this;
-		this.itemClass = ko.computed(function () {
-			var result = 'list-group-item';
-			if (self.selected()) {
-				result += ' active';
-			}
-			return result;
-		});
-	};
-
-	ServiceViewModel.prototype.actionsAfterRenderHandler = function (elements) {
-		// var $elements = $(elements);
-		// var $firstTabElement = $elements.first('.nav.nav-tabs li');
-		// if ($firstTabElement) {
-		// 	$firstTabElement.tab('show');
-		// }
-	};
-
-	var ServiceListViewModel = function () {
-		this.services = ko.observableArray([]);
-		this.selectedServiceIndex = ko.observable(null);
 		
-		var self = this;
-		this.selectedService = ko.computed(function () {
-			var services = self.services();
-			var selectedServiceIndex = self.selectedServiceIndex();
-			if (selectedServiceIndex !== null && services.length > 0) {
-				return services[selectedServiceIndex] || null;
+		self.view = ko.observable();
+		self.viewModel = ko.observable();
+		self.viewTemplate = ko.computed(function () {
+			var viewModel = self.viewModel();
+			if (viewModel) {
+				return {
+					name: viewModel.viewName,
+					data: viewModel,
+				};
 			} else {
-				return null;
+				return {
+					name: 'emptyPageTemplate',
+					data: null,
+				};
 			}
 		});
-	};
 
-	ServiceListViewModel.prototype.selectService = function (serviceIndex) {
-		serviceIndex = ko.unwrap(serviceIndex);
-
-		this.selectedServiceIndex(serviceIndex);
-
-		var services = this.services();
-
-		services.forEach(function (item, index) {
-			item.selected(index === serviceIndex);
-		});
-	};
-
-	var ServiceContainerViewModel = function (servicesObservable, selectedServiceObservable) {
-		this.services = servicesObservable;
-		this.selectedService = selectedServiceObservable;
-
-		var self = this;
-		this.templateName = ko.computed(function () {
-			var services = self.services();
-			if (!services || services.length === 0) {
-				return 'noServicesAvailableTemplate';
+		self.buildAuthorizationHeader = function (credentials) {
+			var credentialsJson = localStorage.getItem('credentials');
+			if (credentialsJson) {
+				var credentials = JSON.parse(credentialsJson);
+				return 'Basic ' + btoa(credentials.username + ':' + credentials.password);
 			}
 
-			var selectedService = self.selectedService();
-			return selectedService ? 'serviceDetailsTemplate' : 'noServiceSelectedTemplate';
+			return null;
+		};
+
+		self.buildApiClient = function () {
+			return function(req) {
+				var url = "api/" + req.url;
+				var headers = $.extend({}, req.headers);
+				var authorization = self.buildAuthorizationHeader();
+				if (authorization) {
+					headers['Authorization'] = authorization;
+				}
+
+				var deferred = Q.defer();
+				return Q($.ajax({
+					url: url,
+					dataType: 'json',
+					method: req.method || 'GET',
+					body: req.body,
+					headers: headers,
+				}).done(function (data, status, xhr) {
+					deferred.resolve({
+						status: xhr.status,
+						body: data,
+					});
+				}).fail(function (xhr) {
+					deferred.resolve({
+						status: xhr.status,
+						body: xhr.responseText,
+					});
+				}));
+
+				return deferred.promise;
+			}
+		}
+
+		self.clearCredentials = function() {
+			localStorage.removeItem('credentials');
+			self.loggedIn(false);
+		};
+
+		self.hasCredentials = function () {
+			return !!localStorage.getItem('credentials');
+		};
+
+		self.initializeBindings = function($element) {
+			ko.applyBindings(self, $element);
+		};
+
+		self.setCredentials = function (credentials) {
+			localStorage.setItem('credentials', JSON.stringify(credentials));
+			self.loggedIn(true);
+		};
+
+		self.setViewModel = function(viewModel) {
+			self.viewModel(viewModel);
+		};
+		
+		//
+		// View Models / State
+		// 
+		self.loggedIn = ko.observable(self.hasCredentials());
+
+		self.servicesPageViewModel = new ServicesPageViewModel(self, self.buildApiClient());
+		self.loginPageViewModel = new LoginPageViewModel(self);
+
+		//
+		// Routes
+		//
+		self.get("/", function (context) {
+			context.redirect("#/services");
 		});
-	};
 
-	var RootPageViewModel = function () {
-		this.serviceListViewModel = new ServiceListViewModel();
+		self.get("#/", function (context) {
+			context.redirect("#/services");
+		});
 
-		this.serviceContainerViewModel = new ServiceContainerViewModel(
-			this.serviceListViewModel.services,
-			this.serviceListViewModel.selectedService);
-	};
+		self.get("#/login", function (context) {
+			self.setViewModel(self.loginPageViewModel);
+		});
 
-	function loadTemplates(url) {
-		var deferred = Q.defer();
+		self.get("#/logout", function (context) {
+			self.clearCredentials();
+			context.redirect("#/login");
+		});
 
-	    $.ajax({
-	        url: url,
-	        dataType: 'html'
-	    }).done(function (html) {
-	        $('head').append(html);
-	        deferred.resolve();
-	    }).fail(function (xhr) {
-	    	var err = new Error("Error Loading Template '" + url + "' : " + xhr.status);
-	        deferred.reject(err);
-	    });
+		self.get("#/services", function (context) {
+			if (!self.loggedIn()) {
+				context.redirect("#/login");
+				return
+			}
 
-	    return deferred.promise;
-	}
+			self.setViewModel(self.servicesPageViewModel);
 
-    loadTemplates('templates/templates.html')
-    	.then(function () {
-			var rootPageViewModel = new RootPageViewModel();
-			ko.applyBindings(rootPageViewModel);
+			self.servicesPageViewModel.listServices();
+		});
 
-			$.ajax({
-				url: '/api/services',
-				dataType: 'json'
-			}).done(function (data) {
-				var serviceViewModels = data.map(function (item) {
-					return new ServiceViewModel(item);
-				});
-				rootPageViewModel.serviceListViewModel.services(serviceViewModels);
-			}).fail(function (xhr) {
-				console.log("Error loading services: " + xhr.status);
-				rootPageViewModel.serviceListViewModel.services([]);
-			});
-    	})
-    	.fail(function (err) {
-    		console.log(err);
-    	});
+		self.get("#/services/:name", function (context) {
+			if (!self.loggedIn()) {
+				context.redirect("#/login");
+				return
+			}
+
+			self.setViewModel(self.servicesPageViewModel);
+
+			self.servicesPageViewModel.showService(context.params['name']);			
+		});
+	})
+
+    loadTemplates([
+    	'templates/shared.html',
+    	'templates/loginPage.html',
+    	'templates/servicesPage.html'
+	]).then(function () {
+		app.initializeBindings();
+		app.run();
+	}).fail(function (err) {
+		console.log(err);
+	});
 });

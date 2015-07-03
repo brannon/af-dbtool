@@ -4,6 +4,12 @@ body {
 	padding: 2.5em;
 }
 
+/* Nav styles */
+
+.navbar .navbar-right {
+	margin-right: 1em;
+}
+
 /* List styles */
 
 div.list-group-item a {
@@ -26,4 +32,8 @@ dl.dl-horizontal dd {
 
 div.tab-content {
 	margin: 1em;
+}
+
+#page-content {
+	margin-top: 50px;
 }
