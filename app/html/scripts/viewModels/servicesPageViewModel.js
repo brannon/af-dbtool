@@ -1,11 +1,15 @@
 var imports = [
 	"knockout",
+	"Q",
 ];
-define(imports, function (ko) {
+define(imports, function (ko, Q) {
 
-	var ServiceActionViewModel = function (serviceViewModel, actionData) {
+	var ServiceActionViewModel = function (apiClient, actionData) {
+		this.apiClient = apiClient;
 		this.rel = actionData.rel;
 		this.href = actionData.href;
+
+		this.actionOutput = ko.observableArray([]);
 
 		this.tabControlId = this.rel + 'Tab';
 		this.tabPaneControlId = this.rel + 'TabPane';
@@ -27,24 +31,71 @@ define(imports, function (ko) {
 		}
 	}
 
+	ServiceActionViewModel.prototype.execute = function () {
+		var deferred = Q.defer(),
+			self = this;
+
+		self.actionOutput([]);
+		
+		self.apiClient({
+			url: self.href,
+			method: 'POST',
+		}).then(function (response) {
+			console.log('Started action');
+			self.apiClient.startWebSocket(response.location, function (ws) {
+				console.log('WebSocket connected: ' + response.location);
+				ws.send(JSON.stringify({ messageType: 'ping' }));
+			}, function (data, ws) {
+				console.log('WebSocket received message: ' + data);
+				var message = JSON.parse(data);
+				switch (message.messageType) {
+					case 'output':
+						self.actionOutput.push(message.text);
+						break;
+
+					case 'exit':
+						if (message.code !== 0) {
+							deferred.reject(new Error('Action failed with exit code ' + message.code));
+						} else {
+							deferred.resolve();
+						}
+						break;
+				}
+			}, function (err, ws) {
+				if (err) {
+					console.log('WebSocket error: ' + err);
+					deferred.reject(err);
+				} else {
+					console.log('WebSocket done');
+					deferred.resolve();
+				}
+			});
+		}).fail(function (response) {
+			console.log(response);
+			deferred.reject(new Error(response.body || 'Error executing action'));
+		});
+
+		return deferred.promise;
+	};
+
 	ServiceActionViewModel.prototype.tabClass = function(tabIndex) {
 		tabIndex = ko.unwrap(tabIndex);
 		return tabIndex === 0 ? 'active' : '';
 	}
 
-	function buildServiceActionViewModels(serviceViewModel, actionsData) {
+	function buildServiceActionViewModels(apiClient, actionsData) {
 		return (actionsData || []).map(function (actionData) {
-			return new ServiceActionViewModel(serviceViewModel, actionData);
+			return new ServiceActionViewModel(apiClient, actionData);
 		});
 	}
 
-	var ServiceViewModel = function (data) {
+	var ServiceViewModel = function (apiClient, data) {
 		this.iconClass = ko.observable('glyphicon glyphicon-cloud');
 		this.selected = ko.observable(false);
 		this.name = ko.observable(data.name || "");
 		this.label = ko.observable(data.label || "");
 		this.plan = ko.observable(data.plan || "");
-		this.actions = ko.observableArray(buildServiceActionViewModels(this, data.actions));
+		this.actions = ko.observableArray(buildServiceActionViewModels(apiClient, data.actions));
 
 		var self = this;
 		this.itemClass = ko.computed(function () {
@@ -56,58 +107,16 @@ define(imports, function (ko) {
 		});
 	};
 
-	var ServiceListViewModel = function (app) {
-		this.app = app;
-		this.services = ko.observableArray([]);
-		this.selectedServiceIndex = ko.observable(null);
-		
-		var self = this;
-		this.selectedService = ko.computed(function () {
-			var services = self.services();
-			var selectedServiceIndex = self.selectedServiceIndex();
-			if (selectedServiceIndex !== null && services.length > 0) {
-				return services[selectedServiceIndex] || null;
-			} else {
-				return null;
-			}
-		});
-	};
+	ServiceViewModel.prototype.executeAction = function(actionName) {
+		var action = this.actions().filter(function (item) {
+			return item.rel === actionName;
+		})[0];
 
-	ServiceListViewModel.prototype.selectService = function (serviceIndex) {
-		serviceIndex = ko.unwrap(serviceIndex);
-
-		this.selectedServiceIndex(serviceIndex);
-
-		var services = this.services();
-		var selectedService;
-		services.forEach(function (item, index) {
-			if (index === serviceIndex) {
-				selectedService = item;
-				item.selected(true);
-			} else {
-				item.selected(false);
-			}
-		});
-
-		if (selectedService) {
-			this.app.setLocation("#/services/" + selectedService.name())
+		if (!action) {
+			throw new Error('Action not found.');
 		}
-	};
 
-	var ServiceContainerViewModel = function (servicesObservable, selectedServiceObservable) {
-		this.services = servicesObservable;
-		this.selectedService = selectedServiceObservable;
-
-		var self = this;
-		this.templateName = ko.computed(function () {
-			var services = self.services();
-			if (!services || services.length === 0) {
-				return 'noServicesAvailableTemplate';
-			}
-
-			var selectedService = self.selectedService();
-			return selectedService ? 'serviceDetailsTemplate' : 'noServiceSelectedTemplate';
-		});
+		return action.execute();
 	};
 
 	var ServicesPageViewModel = function (app, apiClient) {
@@ -131,6 +140,35 @@ define(imports, function (ko) {
 		});
 	};
 
+	ServicesPageViewModel.prototype.executeServiceAction = function(name, actionName) {
+		var self = this;
+
+		self.getService(name)
+			.then(function (service) {
+				return service.executeAction(actionName)
+					.fail(function (err) {
+						// TODO: Show an error page
+						console.log(err);
+					})
+			});
+	};
+
+	ServicesPageViewModel.prototype.getService = function (name) {
+		var self = this;
+		return self.loadServices()
+			.then(function (services) {
+				var service = services.filter(function (item) {
+					return item.name() === name;
+				})[0];
+
+				if (!service) {
+					throw new Error('Service not found');
+				}
+
+				return service;
+			});
+	};
+
 	ServicesPageViewModel.prototype.loadServices = function () {
 		var self = this;
 
@@ -138,16 +176,16 @@ define(imports, function (ko) {
 			return self.loadServicesPromise;
 		}
 
-		self.loadServicesPromise = this.apiClient({
-			url: 'services'
-		}).then(function (data) {
-			var serviceViewModels = data.map(function (item) {
-				return new ServiceViewModel(item);
+		self.loadServicesPromise = self.apiClient({
+			url: '/api/services'
+		}).then(function (response) {
+			var serviceViewModels = response.body.map(function (item) {
+				return new ServiceViewModel(self.apiClient, item);
 			});
 			self.services(serviceViewModels);
 			return self.services();
-		}).fail(function (err) {
-			console.log(err);
+		}).fail(function (response) {
+			console.log(response);
 			self.services([]);
 			return self.services();
 		});
@@ -167,13 +205,13 @@ define(imports, function (ko) {
 	ServicesPageViewModel.prototype.showService = function (name) {
 		var self = this;
 
-		self.loadServices()
-			.then(function (services) {
-				var selectedService = services.filter(function (item) {
-					return item.name() === name;
-				})[0];
-
-				self.selectedService(selectedService);
+		self.getService(name)
+			.then(function (service) {
+				self.selectedService(service);
+			})
+			.fail(function (err) {
+				// TODO: Show an error page
+				console.log(err);
 			});
 	};
 

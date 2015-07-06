@@ -4,56 +4,67 @@ import (
     "errors"
     "fmt"
     "io"
+    "log"
     "os"
     "os/exec"
     "runtime"
-    "strconv"
+    "strings"
 )
 
 type MysqlProvider struct {
 }
 
-func (provider *MysqlProvider) Export(credentials map[string]interface{}, output io.Writer) error {
+func (provider *MysqlProvider) Export(credentials map[string]interface{}, outputWriter io.Writer) error {
     host, ok := credentials["hostname"].(string)
     if !ok {
-        return errors.New("Cannot connect to mysql instance. Hostname is required.")
+        return connectError("Cannot connect to mysql instance. Hostname is required.")
     }
 
-    port, ok := credentials["port"].(int)
+    port, ok := credentials["port"].(float64)
     if !ok {
-        return errors.New("Cannot connect to mysql instance. Port is required.")
+        return connectError("Cannot connect to mysql instance. Port is required.")
     }
 
     username, ok := credentials["username"].(string)
     if !ok {
-        return errors.New("Cannot connect to mysql instance. Username is required.")
+        return connectError("Cannot connect to mysql instance. Username is required.")
     }
 
     password, ok := credentials["password"].(string)
     if !ok {
-        return errors.New("Cannot connect to mysql instance. Password is required.")
+        return connectError("Cannot connect to mysql instance. Password is required.")
     }
 
-    args := []string{
-        "-h",
-        host,
-        "-P",
-        strconv.Itoa(port),
-        "-u",
-        username,
-        "-p",
-        password,
-        "--all-databases",
+    database, ok := credentials["name"].(string)
+    if !ok {
+        return connectError("Cannot connect to mysql instance. Name is required.")
     }
+
+    path := buildLibPath("mysqldump")
+    args := []string{
+        "--protocol=tcp",
+        fmt.Sprintf("--host=%s", host),
+        fmt.Sprintf("--port=%0.f", port),
+        fmt.Sprintf("--user=%s", username),
+        fmt.Sprintf("--password=%s", password),
+        database,
+    }
+
+    log.Printf("MYSQL: Executing %s %s", path, strings.Join(args, " "))
 
     cmd := &exec.Cmd{
         Path:   buildLibPath("mysqldump"),
         Args:   args,
-        Stdout: output,
-        Stderr: output,
+        Stdout: outputWriter,
+        Stderr: os.Stderr,
     }
 
     return cmd.Run()
+}
+
+func connectError(message string) error {
+    log.Printf("MYSQL: %s\n", message)
+    return errors.New(message)
 }
 
 func buildLibPath(executable string) string {

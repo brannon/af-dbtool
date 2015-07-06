@@ -21,14 +21,19 @@ func main() {
 
     router := mux.NewRouter()
 
-    apiRouter := router.
+    authenticatedApiRouter := router.
         PathPrefix("/api/").
         Subrouter()
-    api.BuildRoutes(apiRouter)
+
+    anonymousApiRouter := router.
+        PathPrefix("/api/").
+        Subrouter()
+
+    api.BuildRoutes(anonymousApiRouter, authenticatedApiRouter)
 
     router.PathPrefix("/").Handler(http.FileServer(http.Dir("./html")))
 
-    basicAuthFilter := auth.NewBasicAuthFilter(Username, password, apiRouter, router)
+    basicAuthFilter := auth.NewBasicAuthFilter(Username, password, authenticatedApiRouter, router)
 
     fmt.Printf("Listening on port %d\n", port)
     http.ListenAndServe(fmt.Sprintf(":%d", port), basicAuthFilter)

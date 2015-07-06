@@ -5,9 +5,14 @@ import (
     "encoding/json"
     "fmt"
     "net/http"
+    "os/exec"
     "sort"
+    "sync"
+    "syscall"
 
+    "code.google.com/p/go-uuid/uuid"
     "github.com/gorilla/mux"
+    "github.com/gorilla/websocket"
 
     "github.com/brannon/af-dbtool/app/cf"
     "github.com/brannon/af-dbtool/app/mysql"
@@ -27,10 +32,26 @@ type ServiceApiModel struct {
 
 type ServiceApiModelArray []*ServiceApiModel
 
-type servicesHandler struct {
+type serviceActionStatus struct {
+    lock   *sync.Mutex
+    buffer *bytes.Buffer
+    exit   chan int
 }
 
-var ServicesHandler = &servicesHandler{}
+type servicesHandler struct {
+    lock      *sync.Mutex
+    upgrader  *websocket.Upgrader
+    statusMap map[string]*serviceActionStatus
+}
+
+var ServicesHandler = &servicesHandler{
+    lock: new(sync.Mutex),
+    upgrader: &websocket.Upgrader{
+        ReadBufferSize:  1024,
+        WriteBufferSize: 1024,
+    },
+    statusMap: make(map[string]*serviceActionStatus),
+}
 
 func (handler *servicesHandler) DoAction(w http.ResponseWriter, req *http.Request) {
     vars := mux.Vars(req)
@@ -54,21 +75,114 @@ func (handler *servicesHandler) DoAction(w http.ResponseWriter, req *http.Reques
     case "export":
         provider := &mysql.MysqlProvider{}
 
-        var buffer bytes.Buffer
-        err := provider.Export(serviceConfiguration.Credentials, &buffer)
-        if err != nil {
-            http.Error(w, err.Error(), 500)
-            return
+        uuid := uuid.New()
+        status := &serviceActionStatus{
+            lock:   new(sync.Mutex),
+            buffer: &bytes.Buffer{},
+            exit:   make(chan int),
         }
 
-        w.WriteHeader(200)
-        w.Write(buffer.Bytes())
+        handler.addStatus(uuid, status)
 
-        break
+        go func() {
+            err := provider.Export(serviceConfiguration.Credentials, status)
+            if err != nil {
+                exitCode, ok := getExitCode(err)
+                if ok {
+                    status.exit <- exitCode
+                } else {
+                    fmt.Printf("ERROR: Unable to execute action: %s\n", err.Error())
+                    status.exit <- -1
+                }
+            } else {
+                status.exit <- 0
+            }
+            close(status.exit)
+        }()
+
+        w.Header().Set("Location", fmt.Sprintf("/api/actions/%s/status", uuid))
+        w.WriteHeader(201)
+        return
 
     default:
         http.Error(w, fmt.Sprintf("The action '%s' is not supported", actionName), 400)
         return
+    }
+}
+
+type outputMessage struct {
+    MessageType string `json:"messageType"`
+    Text        string `json:"text"`
+}
+
+type exitMessage struct {
+    MessageType string `json:"messageType"`
+    Code        int    `json:"code"`
+}
+
+func (handler *servicesHandler) GetServiceActionStatus(w http.ResponseWriter, req *http.Request) {
+    vars := mux.Vars(req)
+    uuid := vars["action_id"]
+
+    status := handler.getStatus(uuid)
+    if status == nil {
+        http.NotFound(w, req)
+        return
+    }
+
+    conn, err := handler.upgrader.Upgrade(w, req, nil)
+    if err != nil {
+        http.Error(w, err.Error(), 500)
+        return
+    }
+
+    defer conn.Close()
+
+    for {
+        // This is necessary to pump control messages on the WebSocket
+        _, _, err := conn.ReadMessage()
+        if err != nil {
+            fmt.Printf("Error while reading message for WebSocket: %s\n", err.Error())
+            return
+        }
+
+        buffer := status.GetBuffer()
+        if len(buffer) > 0 {
+            outputMessage := outputMessage{
+                MessageType: "output",
+                Text:        string(buffer),
+            }
+
+            err := conn.WriteJSON(outputMessage)
+            if err != nil {
+                fmt.Printf("Error while writing output message for WebSocket: %s\n", err.Error())
+                return
+            }
+        }
+
+        select {
+        case code := <-status.exit:
+            exitMessage := &exitMessage{
+                MessageType: "exit",
+                Code:        code,
+            }
+
+            err := conn.WriteJSON(exitMessage)
+            if err != nil {
+                fmt.Printf("Error while writing exit message for WebSocket: %s\n", err.Error())
+                return
+            }
+
+            err = conn.WriteMessage(websocket.CloseMessage, nil)
+            if err != nil {
+                fmt.Printf("Error while writing close message for WebSocket: %s\n", err.Error())
+                return
+            }
+            return
+
+        default:
+            break
+        }
     }
 }
 
@@ -92,6 +206,41 @@ func (handler *servicesHandler) List(w http.ResponseWriter, req *http.Request) {
     w.Write(data)
 }
 
+func (handler *servicesHandler) addStatus(uuid string, status *serviceActionStatus) {
+    handler.lock.Lock()
+    defer handler.lock.Unlock()
+
+    handler.statusMap[uuid] = status
+}
+
+func (handler *servicesHandler) getStatus(uuid string) *serviceActionStatus {
+    handler.lock.Lock()
+    defer handler.lock.Unlock()
+
+    return handler.statusMap[uuid]
+}
+
+func (status *serviceActionStatus) GetBuffer() []byte {
+    status.lock.Lock()
+    defer status.lock.Unlock()
+
+    buffer := status.buffer
+    status.buffer = &bytes.Buffer{}
+
+    if buffer != nil {
+        return buffer.Bytes()
+    } else {
+        return []byte{}
+    }
+}
+
+func (status *serviceActionStatus) Write(data []byte) (int, error) {
+    status.lock.Lock()
+    defer status.lock.Unlock()
+
+    return status.buffer.Write(data)
+}
+
 func buildServiceActionApiModel(serviceName string, actionName string) ServiceActionApiModel {
     return ServiceActionApiModel{
         Rel:  actionName,
@@ -107,6 +256,16 @@ func findServiceWithName(serviceConfigurations []*cf.ServiceConfiguration, name 
     }
 
     return nil
+}
+
+func getExitCode(err error) (int, bool) {
+    if exitErr, ok := err.(*exec.ExitError); ok {
+        if waitStatus, ok := exitErr.Sys().(syscall.WaitStatus); ok {
+            return waitStatus.ExitStatus(), true
+        }
+    }
+
+    return 0, false
 }
 
 func getServiceApiModelFromServiceConfiguration(serviceConfiguration *cf.ServiceConfiguration) *ServiceApiModel {

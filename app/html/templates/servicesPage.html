@@ -33,7 +33,11 @@
 			</li>
 		</ul>
 		<div class="tab-content" data-bind="foreach: actions">
-			<div role="tabpanel" class="tab-pane" data-bind="text: description, css: tabClass($index), attr: { id: tabPaneControlId }"></div>
+			<div role="tabpanel" class="tab-pane" data-bind="css: tabClass($index), attr: { id: tabPaneControlId }">
+				<p data-bind="text: description"></p>
+				<button data-bind="text: title, click: execute" />
+				<pre data-bind="text: actionOutput"></pre>
+			</div>
 		</div>
 	</div>
 </script>

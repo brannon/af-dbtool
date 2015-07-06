@@ -7,7 +7,8 @@ export VCAP_SERVICES='
 				"hostname": "localhost",
 				"port": 3309,
 				"username": "username",
-				"password": "password"
+				"password": "password",
+				"name": "database_name"
 			},
 			"label": "p-mysql",
 			"name": "mysql-service",

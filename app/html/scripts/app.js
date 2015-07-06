@@ -46,10 +46,9 @@ requirejs(imports, function(Sammy, $, ko, Q, LoginPageViewModel, ServicesPageVie
 			}
 		});
 
-		self.buildAuthorizationHeader = function (credentials) {
-			var credentialsJson = localStorage.getItem('credentials');
-			if (credentialsJson) {
-				var credentials = JSON.parse(credentialsJson);
+		self.buildAuthorizationHeader = function () {
+			var credentials = self.getCredentials();
+			if (credentials) {
 				return 'Basic ' + btoa(credentials.username + ':' + credentials.password);
 			}
 
@@ -57,8 +56,30 @@ requirejs(imports, function(Sammy, $, ko, Q, LoginPageViewModel, ServicesPageVie
 		};
 
 		self.buildApiClient = function () {
-			return function(req) {
-				var url = "api/" + req.url;
+			function buildSuccessResponse(data, xhr) {
+				var response = {
+					status: xhr.status,
+					body: data,			
+				};
+
+				if (xhr.status === 201) {
+					response.location = xhr.getResponseHeader('Location');
+				}
+
+				return response;
+			}
+
+			function buildErrorResponse(xhr) {
+				var response = {
+					status: xhr.status,
+					body: xhr.responseText,
+				};
+
+				return response;
+			}
+
+			var client = function(req) {
+				var url = req.url;
 				var headers = $.extend({}, req.headers);
 				var authorization = self.buildAuthorizationHeader();
 				if (authorization) {
@@ -66,32 +87,65 @@ requirejs(imports, function(Sammy, $, ko, Q, LoginPageViewModel, ServicesPageVie
 				}
 
 				var deferred = Q.defer();
-				return Q($.ajax({
+
+				$.ajax({
 					url: url,
 					dataType: 'json',
 					method: req.method || 'GET',
 					body: req.body,
 					headers: headers,
-				}).done(function (data, status, xhr) {
-					deferred.resolve({
-						status: xhr.status,
-						body: data,
-					});
+				}).done(function (data, _, xhr) {
+					deferred.resolve(buildSuccessResponse(data, xhr));
 				}).fail(function (xhr) {
-					deferred.resolve({
-						status: xhr.status,
-						body: xhr.responseText,
-					});
-				}));
+					if (xhr.status >= 200 && xhr.status < 300) {
+						deferred.resolve(buildSuccessResponse({}, xhr));
+					} else {
+						deferred.reject(buildErrorResponse(xhr));
+					}
+				});
 
 				return deferred.promise;
-			}
+			};
+
+			client.startWebSocket = function (url, openCallback, dataCallback, doneCallback) {
+				var wsUrl = window.location.origin; // HACK: global
+				var wsUrl = wsUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+				wsUrl += url;
+
+				var ws = new WebSocket(wsUrl);
+				ws.onopen = function (e) {
+					openCallback(ws);
+				};
+
+				ws.onmessage = function (e) {
+					dataCallback(e.data, ws);
+				};
+
+				ws.onclose = function (e) {
+					doneCallback(null, ws);
+				};
+
+				ws.onerror = function (err) {
+					doneCallback(err, ws);
+				};
+			};
+
+			return client;
 		}
 
 		self.clearCredentials = function() {
 			localStorage.removeItem('credentials');
 			self.loggedIn(false);
 		};
+
+		self.getCredentials = function () {
+			var credentialsJson = localStorage.getItem('credentials');
+			if (credentialsJson) {
+				return JSON.parse(credentialsJson);
+			}
+
+			return null;
+		}
 
 		self.hasCredentials = function () {
 			return !!localStorage.getItem('credentials');
@@ -158,6 +212,17 @@ requirejs(imports, function(Sammy, $, ko, Q, LoginPageViewModel, ServicesPageVie
 			self.setViewModel(self.servicesPageViewModel);
 
 			self.servicesPageViewModel.showService(context.params['name']);			
+		});
+
+		self.get("#/services/:name/actions/:action_name", function (context) {
+			if (!self.loggedIn()) {
+				context.redirect("#/login");
+				return
+			}
+
+			self.setViewModel(self.servicesPageViewModel);
+
+			self.servicesPageViewModel.executeServiceAction(context.params['name'], context.params['action_name']);
 		});
 	})
 

@@ -4,12 +4,14 @@ import (
     "github.com/gorilla/mux"
 )
 
-func BuildRoutes(r *mux.Router) {
+func BuildRoutes(anonymousRouter *mux.Router, authenticatedRouter *mux.Router) {
 
-    r.HandleFunc("/services", ServicesHandler.List).
+    authenticatedRouter.HandleFunc("/services", ServicesHandler.List).
         Methods("GET")
 
-    r.HandleFunc("/services/{name}/actions/{action_name}", ServicesHandler.DoAction).
+    authenticatedRouter.HandleFunc("/services/{name}/actions/{action_name}", ServicesHandler.DoAction).
         Methods("POST")
 
+    anonymousRouter.HandleFunc("/actions/{action_id}/status", ServicesHandler.GetServiceActionStatus).
+        Methods("GET")
 }

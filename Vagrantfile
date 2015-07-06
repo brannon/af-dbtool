@@ -65,9 +65,31 @@ Vagrant.configure(2) do |config|
   # Puppet, Chef, Ansible, Salt, and Docker are also available. Please see the
   # documentation for more information about their specific syntax and use.
   config.vm.provision "shell", inline: <<-SHELL
-    sudo apt-get update
+    #sudo apt-get update
     sudo apt-get install -y mysql-client-5.6
-    sudo apt-get install -y golang
-    
+    sudo apt-get install -y mercurial
+
+    if [ ! -e /tmp/go1.4.2.linux-amd64.tar.gz ]; then
+      wget --no-verbose -O /tmp/go1.4.2.linux-amd64.tar.gz https://storage.googleapis.com/golang/go1.4.2.linux-amd64.tar.gz
+      sudo tar -C /usr/local -xzf /tmp/go1.4.2.linux-amd64.tar.gz
+    fi
+
+    GOPATH=/home/vagrant/go
+    GOROOT=/usr/local/go
+
+    mkdir -p $GOPATH
+    mkdir -p $GOPATH/src/github.com/brannon
+    sudo chown -R vagrant:vagrant $GOPATH
+
+    ln -f -s /vagrant /home/vagrant/go/src/github.com/brannon/af-dbtool
+
+    echo "export GOPATH=$GOPATH" >> /home/vagrant/.profile
+    echo "export GOROOT=$GOROOT" >> /home/vagrant/.profile
+    echo "export PATH=$PATH:$GOROOT/bin:$GOPATH/bin" >> /home/vagrant/.profile
+
+    cd $GOPATH
+    go get github.com/kr/godep
+    go install github.com/kr/godep
+
   SHELL
 end
